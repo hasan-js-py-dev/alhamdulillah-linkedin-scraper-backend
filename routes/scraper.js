@@ -3,6 +3,7 @@ const path = require('path');
 const express = require('express');
 const { authenticateJWT } = require('../middleware/auth');
 const { initStealthBrowser } = require('../services/browser');
+const { getProxyForUser } = require('../services/proxyAssigner');
 const { PLAYWRIGHT_KEEP_BROWSER_OPEN } = require('../config/config');
 
 const router = express.Router();
@@ -15,14 +16,39 @@ router.post('/salesnav/start', authenticateJWT, async (req, res) => {
 
   try {
     // TODO: check credits for userId and throw if not enough.
-    // TODO: assign proxy + fingerprint based on proxydb.* collections.
-    const proxyConfig = null; // Replace with real proxy assignment result.
-    const fingerprint = {
+    const baseFingerprint = {
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
         '(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
       viewport: { width: 1366, height: 768 },
       locale: 'en-US',
       timezoneId: 'America/Los_Angeles'
+    };
+
+    let proxyAssignment;
+    try {
+      proxyAssignment = await getProxyForUser(userId);
+    } catch (assignmentError) {
+      if (assignmentError.code === 'NO_PROXY_AVAILABLE') {
+        return res.status(503).json({
+          success: false,
+          message: 'No proxy available for this user. Please retry later.'
+        });
+      }
+      throw assignmentError;
+    }
+
+    const proxyConfig = proxyAssignment.proxy;
+    const proxyMetadata = proxyAssignment.metadata || {};
+    if (!proxyConfig || !proxyConfig.host || !proxyConfig.port) {
+      return res.status(500).json({
+        success: false,
+        message: 'Assigned proxy is missing host/port configuration.',
+        error: 'INVALID_PROXY_CONFIG'
+      });
+    }
+    const fingerprint = {
+      ...baseFingerprint,
+      ...(proxyAssignment.fingerprint || {})
     };
 
     const tempProfileDir = path.join(process.cwd(), 'temp-profiles', `user_${userId}_${Date.now()}`);
@@ -40,7 +66,9 @@ router.post('/salesnav/start', authenticateJWT, async (req, res) => {
     return res.json({
       success: true,
       message: 'Sales Navigator scraper demo started successfully.',
-      userId
+      userId,
+      proxyId: proxyMetadata._id,
+      proxyLocation: proxyMetadata.location
     });
   } catch (error) {
     console.error('[scraper] Failed to start Sales Navigator scraper', error);

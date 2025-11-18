@@ -12,10 +12,16 @@ async function initStealthBrowser(options = {}) {
     headless: true,
     timeout: PLAYWRIGHT_DEFAULTS.launchTimeout,
     args: [
-      '--disable-blink-features=AutomationControlled',
-      '--disable-infobars'
+      '--disable-infobars',
+      '--test-type'
     ],
-    ignoreDefaultArgs: ['--enable-automation']
+    ignoreDefaultArgs: ['--enable-automation', '--no-sandbox'],
+    env: {
+      ...process.env,
+      GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || 'na',
+      GOOGLE_DEFAULT_CLIENT_ID: process.env.GOOGLE_DEFAULT_CLIENT_ID || 'na',
+      GOOGLE_DEFAULT_CLIENT_SECRET: process.env.GOOGLE_DEFAULT_CLIENT_SECRET || 'na'
+    }
   };
     const resolvedHeadless = typeof headless === 'boolean' ? headless : PLAYWRIGHT_HEADLESS;
     launchOptions.headless = resolvedHeadless;
@@ -63,7 +69,23 @@ async function initStealthBrowser(options = {}) {
       context = await browser.newContext(contextOptions);
     }
     context.setDefaultNavigationTimeout(PLAYWRIGHT_DEFAULTS.navigationTimeout);
-    const page = await context.newPage();
+    const bootPages = context.pages();
+    let page;
+    if (bootPages.length) {
+      page = bootPages[bootPages.length - 1];
+      if (bootPages.length > 1) {
+        const pagesToClose = bootPages.slice(0, -1);
+        await Promise.all(pagesToClose.map(async (bootPage) => {
+          try {
+            await bootPage.close();
+          } catch (err) {
+            console.warn('[browser] Failed to close startup page', err.message);
+          }
+        }));
+      }
+    } else {
+      page = await context.newPage();
+    }
 
     return { browser, context, page };
   } catch (error) {

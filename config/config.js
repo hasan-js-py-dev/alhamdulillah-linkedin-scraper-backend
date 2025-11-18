@@ -19,6 +19,14 @@ const PLAYWRIGHT_DEFAULTS = {
 
 const PLAYWRIGHT_HEADLESS = process.env.PLAYWRIGHT_HEADLESS === 'false' ? false : true;
 const PLAYWRIGHT_KEEP_BROWSER_OPEN = process.env.PLAYWRIGHT_KEEP_BROWSER_OPEN === 'true';
+const MONGODB_URI = process.env.MONGODB_URI || '';
+const PROXY_DB_NAME = process.env.PROXY_DB_NAME || 'proxydb';
+const PROXIES_COLLECTION = process.env.PROXIES_COLLECTION || 'proxies';
+const PROXY_ASSIGNMENTS_COLLECTION = process.env.PROXY_ASSIGNMENTS_COLLECTION || 'assigned';
+
+if (!MONGODB_URI) {
+  console.warn('[config] MONGODB_URI is not set. Proxy assignment features will fail.');
+}
 
 module.exports = {
   PORT,
@@ -26,5 +34,9 @@ module.exports = {
   JWT_SECRET,
   PLAYWRIGHT_DEFAULTS,
   PLAYWRIGHT_HEADLESS,
-  PLAYWRIGHT_KEEP_BROWSER_OPEN
+  PLAYWRIGHT_KEEP_BROWSER_OPEN,
+  MONGODB_URI,
+  PROXY_DB_NAME,
+  PROXIES_COLLECTION,
+  PROXY_ASSIGNMENTS_COLLECTION
 };
