@@ -3,7 +3,7 @@ const path = require('path');
 const express = require('express');
 const { authenticateJWT } = require('../middleware/auth');
 const { initStealthBrowser } = require('../services/browser');
-const { getProxyForUser } = require('../services/proxyAssigner');
+const { ensureHealthyProxyForUser } = require('../services/proxyHealth');
 const { PLAYWRIGHT_KEEP_BROWSER_OPEN } = require('../config/config');
 
 const router = express.Router();
@@ -26,12 +26,12 @@ router.post('/salesnav/start', authenticateJWT, async (req, res) => {
 
     let proxyAssignment;
     try {
-      proxyAssignment = await getProxyForUser(userId);
+      proxyAssignment = await ensureHealthyProxyForUser(userId);
     } catch (assignmentError) {
-      if (assignmentError.code === 'NO_PROXY_AVAILABLE') {
+      if (assignmentError.code === 'NO_PROXY_AVAILABLE' || assignmentError.code === 'NO_HEALTHY_PROXY_AVAILABLE') {
         return res.status(503).json({
           success: false,
-          message: 'No proxy available for this user. Please retry later.'
+          message: 'No healthy proxy available for this user. Please retry later.'
         });
       }
       throw assignmentError;
