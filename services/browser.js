@@ -23,8 +23,20 @@ async function initStealthBrowser(options = {}) {
       GOOGLE_DEFAULT_CLIENT_SECRET: process.env.GOOGLE_DEFAULT_CLIENT_SECRET || 'na'
     }
   };
-    const resolvedHeadless = typeof headless === 'boolean' ? headless : PLAYWRIGHT_HEADLESS;
-    launchOptions.headless = resolvedHeadless;
+  const extensionPaths = discoverExtensionDirectories();
+  const resolvedHeadless = typeof headless === 'boolean' ? headless : PLAYWRIGHT_HEADLESS;
+  launchOptions.headless = resolvedHeadless;
+
+  if (extensionPaths.length) {
+    if (launchOptions.headless) {
+      console.warn('[browser] Extensions require headful mode. Forcing headless=false.');
+      launchOptions.headless = false;
+    }
+
+    const extensionArg = formatExtensionArg(extensionPaths);
+    launchOptions.args.push(`--disable-extensions-except=${extensionArg}`);
+    launchOptions.args.push(`--load-extension=${extensionArg}`);
+  }
 
   if (proxy && proxy.host && proxy.port) {
     launchOptions.proxy = {
@@ -98,3 +110,25 @@ async function initStealthBrowser(options = {}) {
 }
 
 module.exports = { initStealthBrowser };
+
+function discoverExtensionDirectories() {
+  const extensionsRoot = path.resolve(process.cwd(), 'extensions');
+  try {
+    const entries = fs.readdirSync(extensionsRoot, { withFileTypes: true });
+    return entries
+      .filter((dirent) => dirent.isDirectory())
+      .map((dirent) => path.join(extensionsRoot, dirent.name));
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.warn('[browser] Failed to read extensions directory', error.message);
+    }
+    return [];
+  }
+}
+
+function formatExtensionArg(paths) {
+  return paths
+    .map((extPath) => extPath.replace(/,/g, ''))
+    .map((extPath) => (extPath.includes(' ') ? `"${extPath}"` : extPath))
+    .join(',');
+}
