@@ -51,6 +51,19 @@ router.post('/salesnav/start', authenticateJWT, async (req, res) => {
       ...(proxyAssignment.fingerprint || {})
     };
 
+    if (proxyMetadata.geolocation) {
+      console.info('[scraper] Proxy geolocation', {
+        ip: proxyMetadata.geolocation.ip,
+        country: proxyMetadata.geolocation.country,
+        region: proxyMetadata.geolocation.region,
+        city: proxyMetadata.geolocation.city,
+        timezone: proxyMetadata.geolocation.timezone,
+        latitude: proxyMetadata.geolocation.latitude,
+        longitude: proxyMetadata.geolocation.longitude,
+        isp: proxyMetadata.geolocation.isp
+      });
+    }
+
     const tempProfileDir = path.join(process.cwd(), 'temp-profiles', `user_${userId}_${Date.now()}`);
     await fs.promises.mkdir(tempProfileDir, { recursive: true });
 
@@ -68,7 +81,8 @@ router.post('/salesnav/start', authenticateJWT, async (req, res) => {
       message: 'Sales Navigator scraper demo started successfully.',
       userId,
       proxyId: proxyMetadata._id,
-      proxyLocation: proxyMetadata.location
+      proxyLocation: proxyMetadata.location,
+      geolocation: proxyMetadata.geolocation || null
     });
   } catch (error) {
     console.error('[scraper] Failed to start Sales Navigator scraper', error);

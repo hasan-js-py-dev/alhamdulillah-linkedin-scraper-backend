@@ -54,15 +54,13 @@ async function initStealthBrowser(options = {}) {
     await fs.promises.mkdir(persistentDir, { recursive: true });
   }
 
-  const contextOptions = {
-    viewport: fingerprint.viewport || { width: 1366, height: 768 },
-    locale: fingerprint.locale || 'en-US',
-    timezoneId: fingerprint.timezoneId || 'America/Los_Angeles'
-  };
-
-  if (fingerprint.userAgent) {
-    contextOptions.userAgent = fingerprint.userAgent;
-  }
+  const contextOptions = buildContextOptions(fingerprint);
+  logBrowserConfiguration({
+    contextOptions,
+    extensionPaths,
+    proxy: launchOptions.proxy,
+    fingerprint
+  });
 
   let browser;
   let context;
@@ -111,6 +109,24 @@ async function initStealthBrowser(options = {}) {
 
 module.exports = { initStealthBrowser };
 
+function buildContextOptions(fingerprint) {
+  const viewport = fingerprint.viewport || pickViewport(fingerprint);
+  const locale = fingerprint.locale || fingerprint.language || 'en-US';
+  const timezoneId = fingerprint.timezoneId || fingerprint.timezone || 'America/Los_Angeles';
+
+  const options = {
+    viewport,
+    locale,
+    timezoneId
+  };
+
+  if (fingerprint.userAgent) {
+    options.userAgent = fingerprint.userAgent;
+  }
+
+  return options;
+}
+
 function discoverExtensionDirectories() {
   const extensionsRoot = path.resolve(process.cwd(), 'extensions');
   try {
@@ -131,4 +147,33 @@ function formatExtensionArg(paths) {
     .map((extPath) => extPath.replace(/,/g, ''))
     .map((extPath) => (extPath.includes(' ') ? `"${extPath}"` : extPath))
     .join(',');
+}
+
+function pickViewport(fingerprint) {
+  const widthCandidate = (fingerprint.viewport && fingerprint.viewport.width) || fingerprint.width || fingerprint.screenWidth;
+  const heightCandidate = (fingerprint.viewport && fingerprint.viewport.height) || fingerprint.height || fingerprint.screenHeight;
+  const width = Number(widthCandidate);
+  const height = Number(heightCandidate);
+  if (width && height) {
+    return { width, height };
+  }
+  return { width: 1366, height: 768 };
+}
+
+function logBrowserConfiguration({ contextOptions, extensionPaths, proxy, fingerprint }) {
+  const summary = {
+    userAgent: contextOptions.userAgent || 'default',
+    viewport: contextOptions.viewport,
+    locale: contextOptions.locale,
+    timezoneId: contextOptions.timezoneId,
+    extensions: extensionPaths.map((extPath) => path.basename(extPath)),
+    proxy: proxy ? { server: proxy.server } : null
+  };
+
+  console.info('[browser] Launch fingerprint summary', summary);
+  if (fingerprint && Object.keys(fingerprint).length) {
+    console.info('[browser] Launch fingerprint source', fingerprint);
+  } else {
+    console.info('[browser] Launch fingerprint source', 'No fingerprint provided; using defaults');
+  }
 }
