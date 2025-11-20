@@ -3,10 +3,68 @@ const path = require('path');
 const express = require('express');
 const { authenticateJWT } = require('../middleware/auth');
 const { initStealthBrowser } = require('../services/browser');
-const { ensureHealthyProxyForUser } = require('../services/proxyHealth');
-const { PLAYWRIGHT_KEEP_BROWSER_OPEN } = require('../config/config');
+const { getProxyForUser } = require('../services/proxyAssigner');
+const { checkProxyLiveness } = require('../services/proxyChecker');
+const { reassignProxyForUser } = require('../services/proxyReassigner');
+const {
+  PLAYWRIGHT_KEEP_BROWSER_OPEN,
+  PROXY_REASSIGN_MAX_ATTEMPTS
+} = require('../config/config');
 
 const router = express.Router();
+
+async function obtainOperationalProxy(userId) {
+  let assignment = await getProxyForUser(userId);
+
+  for (let attempt = 0; attempt < PROXY_REASSIGN_MAX_ATTEMPTS; attempt += 1) {
+    let alive;
+    try {
+      alive = await checkProxyLiveness(assignment.proxy);
+    } catch (checkerError) {
+      console.error('[scraper] Proxy liveness check threw', {
+        userId,
+        proxyId: assignment.metadata && assignment.metadata.proxyId,
+        message: checkerError.message
+      });
+      alive = false;
+    }
+
+    if (alive) {
+      return assignment;
+    }
+
+    console.warn('[scraper] Proxy failed liveness check', {
+      userId,
+      proxyId: assignment.metadata && assignment.metadata.proxyId,
+      attempt: attempt + 1,
+      maxAttempts: PROXY_REASSIGN_MAX_ATTEMPTS
+    });
+
+    if (attempt === PROXY_REASSIGN_MAX_ATTEMPTS - 1) {
+      break;
+    }
+
+    try {
+      assignment = await reassignProxyForUser({
+        userId,
+        proxyId: assignment.metadata && assignment.metadata.proxyId,
+        reason: 'LIVENESS_CHECK_FAILED'
+      });
+    } catch (reassignError) {
+      throw reassignError;
+    }
+
+    if (!assignment) {
+      const error = new Error('NO_PROXY_AVAILABLE');
+      error.code = 'NO_PROXY_AVAILABLE';
+      throw error;
+    }
+  }
+
+  const error = new Error('NO_LIVE_PROXY_AVAILABLE');
+  error.code = 'NO_LIVE_PROXY_AVAILABLE';
+  throw error;
+}
 
 router.post('/salesnav/start', authenticateJWT, async (req, res) => {
   const userId = req.user.id;
@@ -26,12 +84,12 @@ router.post('/salesnav/start', authenticateJWT, async (req, res) => {
 
     let proxyAssignment;
     try {
-      proxyAssignment = await ensureHealthyProxyForUser(userId);
+      proxyAssignment = await obtainOperationalProxy(userId);
     } catch (assignmentError) {
-      if (assignmentError.code === 'NO_PROXY_AVAILABLE' || assignmentError.code === 'NO_HEALTHY_PROXY_AVAILABLE') {
+      if (assignmentError.code === 'NO_PROXY_AVAILABLE' || assignmentError.code === 'NO_LIVE_PROXY_AVAILABLE') {
         return res.status(503).json({
           success: false,
-          message: 'No healthy proxy available for this user. Please retry later.'
+          message: 'No working proxy available for this user. Please retry later.'
         });
       }
       throw assignmentError;

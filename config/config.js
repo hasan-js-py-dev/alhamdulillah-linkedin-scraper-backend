@@ -23,6 +23,8 @@ const MONGODB_URI = process.env.MONGODB_URI || '';
 const PROXY_DB_NAME = process.env.PROXY_DB_NAME || 'proxydb';
 const PROXIES_COLLECTION = process.env.PROXIES_COLLECTION || 'proxies';
 const PROXY_ASSIGNMENTS_COLLECTION = process.env.PROXY_ASSIGNMENTS_COLLECTION || 'assigned';
+const PROXY_CHECK_TIMEOUT_MS = Number(process.env.PROXY_CHECK_TIMEOUT_MS || 5000);
+const PROXY_REASSIGN_MAX_ATTEMPTS = Number(process.env.PROXY_REASSIGN_MAX_ATTEMPTS || 3);
 
 if (!MONGODB_URI) {
   console.warn('[config] MONGODB_URI is not set. Proxy assignment features will fail.');
@@ -38,5 +40,7 @@ module.exports = {
   MONGODB_URI,
   PROXY_DB_NAME,
   PROXIES_COLLECTION,
-  PROXY_ASSIGNMENTS_COLLECTION
+  PROXY_ASSIGNMENTS_COLLECTION,
+  PROXY_CHECK_TIMEOUT_MS,
+  PROXY_REASSIGN_MAX_ATTEMPTS
 };
